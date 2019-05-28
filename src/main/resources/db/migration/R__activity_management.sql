@@ -1,64 +1,35 @@
-/* Fonction qui ajoute une activité avec son propriétaire */
-CREATE OR REPLACE FUNCTION add_activity(in_title character, in_description text, in_owner_id bigint) RETURNS activity AS $$
+--
+-- add an activity
+--
+CREATE OR REPLACE FUNCTION add_activity(in_title varchar(500),in_description text, in_owner_id bigint default null) RETURNS activity AS $$
+    DECLARE
+        default_owner "user"%rowtype;
+        activity_id bigint;
+        activity_res activity%rowtype;
+    BEGIN
+        if in_owner_id is null then
+            default_owner := get_default_owner();
+            in_owner_id := default_owner.id;
+        end if;
+        activity_id := nextval('id_generator');
+        insert into activity (id, title, description,creation_date, modification_date, owner_id)
+            values(activity_id, in_title, in_description,now(), now(), in_owner_id);
+        select * into activity_res
+            from activity
+            where id = activity_id;
+        return activity_res;
+    END;
+$$ language plpgsql;
 
-	--Je suis un commentaire
-	/* Moi aussi */
-	
-	/* But de la fonction */
-	-- On ajoute une ligne dans activity avec les éléments fournis en paramètres
-	-- Si in_owner_id n'est pas fourni, on le remplace par l'id du default owner
-	-- On renvoie ensuite la ligne correspondant à la nouvelle activité
-	
-	/* Début du code */
-
-DECLARE
-	retour activity%rowtype;
-	
-BEGIN
-
-	INSERT INTO activity (id, title, description, creation_date, modification_date, owner_id)
-	VALUES (nextval('id_generator'), in_title, in_description, now(), now(), in_owner_id);
-	SELECT * INTO retour FROM activity WHERE title = in_title AND description = in_description AND owner_id = in_owner_id;
-	
-	return retour;
-	
-END;
-$$ LANGUAGE plpgsql;
-
-
-
-
-/* Fonction qui ajoute une activité sans son propriétaire */
-CREATE OR REPLACE FUNCTION add_activity(in_title character, in_description text) RETURNS activity AS $$
-
-DECLARE
-	retour activity%rowtype;
-	default_id bigint;
-
-BEGIN
-
-	SELECT id INTO default_id FROM get_default_owner();
-	INSERT INTO activity (id, title, description, creation_date, modification_date, owner_id)
-	VALUES (nextval('id_generator'), in_title, in_description, now(), now(), default_id);
-	SELECT * INTO retour FROM activity WHERE title = in_title AND description = in_description;
-	
-	return retour;
-	 
-END;
-$$ LANGUAGE plpgsql;	
-
-
-
-
-/* Fonction qui renvoie toutes les activités avec leur propriétaire respectif */
-CREATE OR REPLACE FUNCTION find_all_activities(pointeur refcursor) RETURNS refcursor AS $$
-
-BEGIN
-
-	OPEN pointeur for SELECT activity.id, activity.title, "user".username FROM activity
-	LEFT JOIN "user" ON "user".id = activity.owner_id;
-	return pointeur;
-	
-END;
-	
-$$ LANGUAGE plpgsql;
+--
+-- find all activities (version param OUT)
+--
+CREATE OR REPLACE FUNCTION find_all_activities(OUT activities_curs refcursor) AS $$
+    begin
+     open activities_curs FOR
+            select act.id as id, title, description, creation_date, modification_date, owner_id, username
+                from activity act left join "user" owner
+                on act.owner_id = owner.id
+                order by title, username;
+    END;
+$$ language plpgsql;
